@@ -1,3 +1,5 @@
+// src/chess_core/piece.js
+
 export const COLOR = Object.freeze({
   WHITE: 'WHITE',
   BLACK: 'BLACK'
@@ -12,7 +14,16 @@ export const PIECE_TYPE = Object.freeze({
   KING: 'KING'
 });
 
-// Unicode symbols map to render pieces directly into HTML
+// Direction offsets: [rowOffset, colOffset]
+export const DIRECTIONS = {
+  ORTHOGONAL: [[-1, 0], [1, 0], [0, -1], [0, 1]],
+  DIAGONAL: [[-1, -1], [-1, 1], [1, -1], [1, 1]],
+  KNIGHT: [
+    [-2, -1], [-2, 1], [-1, -2], [-1, 2],
+    [1, -2],  [1, 2],  [2, -1],  [2, 1]
+  ]
+};
+
 const UNICODE_PIECES = {
   [COLOR.WHITE]: {
     [PIECE_TYPE.PAWN]: '♙',
@@ -38,8 +49,16 @@ export class Piece {
     this.type = type;
   }
 
-  // Returns the Unicode character corresponding to this piece
   get symbol() {
     return UNICODE_PIECES[this.color][this.type];
+  }
+
+  // Helper to identify sliding pieces
+  get isSliding() {
+    return (
+      this.type === PIECE_TYPE.ROOK ||
+      this.type === PIECE_TYPE.BISHOP ||
+      this.type === PIECE_TYPE.QUEEN
+    );
   }
 }
