@@ -25,11 +25,11 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { shallowRef } from 'vue';
 import { Board } from '../chess_core/board.js';
 
-// Instantiate reactive board state
-const board = ref(new Board());
+// Use shallowRef to keep Board isntance clean
+const board = shallowRef(new Board());
 
 const getPiece = (index) => board.value.getPieceByIndex(index);
 const getRow = (index) => Math.floor((index - 1) / 8);
