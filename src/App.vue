@@ -1,7 +1,7 @@
 <script setup>
-import HelloWorld from './components/HelloWorld.vue'
+import ChessBoard from './components/ChessBoard.vue'
 </script>
 
 <template>
-  <HelloWorld />
+  <ChessBoard />
 </template>
