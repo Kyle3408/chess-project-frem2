@@ -26,12 +26,12 @@ export const DIRECTIONS = {
 
 const UNICODE_PIECES = {
   [COLOR.WHITE]: {
-    [PIECE_TYPE.PAWN]: '♙',
-    [PIECE_TYPE.KNIGHT]: '♘',
-    [PIECE_TYPE.BISHOP]: '♗',
-    [PIECE_TYPE.ROOK]: '♖',
-    [PIECE_TYPE.QUEEN]: '♕',
-    [PIECE_TYPE.KING]: '♔',
+    [PIECE_TYPE.PAWN]: '♟',
+    [PIECE_TYPE.KNIGHT]: '♞',
+    [PIECE_TYPE.BISHOP]: '♝',
+    [PIECE_TYPE.ROOK]: '♜',
+    [PIECE_TYPE.QUEEN]: '♛',
+    [PIECE_TYPE.KING]: '♚',
   },
   [COLOR.BLACK]: {
     [PIECE_TYPE.PAWN]: '♟',
