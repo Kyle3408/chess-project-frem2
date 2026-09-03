@@ -124,3 +124,47 @@ describe('Board.movePiece Execution & State Updates', () => {
     assert.equal(success, false);
   });
 });
+
+describe('Chess edge-case rules', () => {
+  it('should generate and execute kingside castling', () => {
+    const board = new Board('4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1');
+
+    assert.ok(board.getValidMovesByIndex(61).includes(63));
+    assert.equal(board.movePiece(61, 63), true);
+    assert.equal(board.getPieceByIndex(63).type, PIECE_TYPE.KING);
+    assert.equal(board.getPieceByIndex(62).type, PIECE_TYPE.ROOK);
+    assert.equal(board.castlingRights.whiteKingside, false);
+    assert.equal(board.castlingRights.whiteQueenside, false);
+  });
+
+  it('should reject castling through an attacked square', () => {
+    const board = new Board('4kr2/8/8/8/8/8/8/4K2R w K - 0 1');
+
+    assert.ok(!board.getValidMovesByIndex(61).includes(63));
+  });
+
+  it('should generate and execute en passant', () => {
+    const board = new Board('4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1');
+
+    assert.ok(board.getValidMovesByIndex(29).includes(20));
+    assert.equal(board.movePiece(29, 20), true);
+    assert.equal(board.getPieceByIndex(20).type, PIECE_TYPE.PAWN);
+    assert.equal(board.getPieceByIndex(28), null);
+    assert.equal(board.enPassantTarget, null);
+  });
+
+  it('should set the en-passant target after a two-square pawn move', () => {
+    const board = new Board();
+
+    board.movePiece(53, 37);
+
+    assert.equal(board.enPassantTarget, 'e3');
+  });
+
+  it('should promote a pawn to the requested piece', () => {
+    const board = new Board('4k3/P7/8/8/8/8/8/4K3 w - - 0 1');
+
+    assert.equal(board.movePiece(9, 1, PIECE_TYPE.KNIGHT), true);
+    assert.equal(board.getPieceByIndex(1).type, PIECE_TYPE.KNIGHT);
+  });
+});

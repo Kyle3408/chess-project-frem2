@@ -26,12 +26,12 @@ export const DIRECTIONS = {
 
 const UNICODE_PIECES = {
   [COLOR.WHITE]: {
-    [PIECE_TYPE.PAWN]: '♙',
-    [PIECE_TYPE.KNIGHT]: '♘',
-    [PIECE_TYPE.BISHOP]: '♗',
-    [PIECE_TYPE.ROOK]: '♖',
-    [PIECE_TYPE.QUEEN]: '♕',
-    [PIECE_TYPE.KING]: '♔',
+    [PIECE_TYPE.PAWN]: '♟',
+    [PIECE_TYPE.KNIGHT]: '♞',
+    [PIECE_TYPE.BISHOP]: '♝',
+    [PIECE_TYPE.ROOK]: '♜',
+    [PIECE_TYPE.QUEEN]: '♛',
+    [PIECE_TYPE.KING]: '♚',
   },
   [COLOR.BLACK]: {
     [PIECE_TYPE.PAWN]: '♟',
@@ -44,21 +44,13 @@ const UNICODE_PIECES = {
 };
 
 export class Piece {
-  /**
-   * Accepts either (type, color) or (color, type) for flexible instantiation
-   */
-  constructor(param1, param2) {
-    if (param1 === COLOR.WHITE || param1 === COLOR.BLACK) {
-      this.color = param1;
-      this.type = param2;
-    } else {
-      this.type = param1;
-      this.color = param2;
-    }
+  constructor(color, type) {
+    this.color = color;
+    this.type = type;
   }
 
   get symbol() {
-    return UNICODE_PIECES[this.color]?.[this.type] || '';
+    return UNICODE_PIECES[this.color][this.type];
   }
 
   // Helper to identify sliding pieces
