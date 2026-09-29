@@ -1,4 +1,4 @@
-// chess_core/fen.js
+// src/chess_core/fen.js
 import { Piece, COLOR, PIECE_TYPE } from './piece.js';
 
 const CHAR_TO_TYPE = {

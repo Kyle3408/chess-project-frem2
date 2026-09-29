@@ -10,7 +10,7 @@ export class Board {
     this.loadFEN(fen);
   }
 
-  // Load state from FEN
+  // Cargar estado desde un FEN
   loadFEN(fenString) {
     const parsed = FENHandler.parse(fenString);
     this.grid = parsed.grid;
@@ -21,7 +21,7 @@ export class Board {
     this.fullMoveNumber = parsed.fullMoveNumber;
   }
 
-  // Export current state to FEN
+  // Exportar estado actual a FEN
   toFEN() {
     return FENHandler.generate({
       grid: this.grid,
@@ -33,7 +33,7 @@ export class Board {
     });
   }
 
-  // PGN Tracking Methods
+  // Historial PGN
   recordMove(sanMove) {
     this.pgnHistory.push({
       moveNumber: this.fullMoveNumber,
@@ -65,113 +65,53 @@ export class Board {
     return `${headerLines.join('\n')}\n\n${pgnBody.trim()}`;
   }
 
-  // Helper method to retrieve a piece using a 1-based index (1 to 64)
+  // Helper: Obtener pieza mediante índice 1-64
   getPieceByIndex(index) {
     const row = Math.floor((index - 1) / 8);
     const col = (index - 1) % 8;
     return this.grid[row][col];
   }
 
-  // Helper method to get valid moves directly using a 1-based index (1 to 64)
+  // Helper: Obtener movimientos legales mediante índice 1-64
   getValidMovesByIndex(index) {
     const row = Math.floor((index - 1) / 8);
     const col = (index - 1) % 8;
-    return this.getValidMoves(row, col);
+    return this.getLegalMoves(row, col);
   }
 
-  // Execute a move on the board by 1-64 index
-  movePiece(fromIndex, toIndex, promotionType = PIECE_TYPE.QUEEN) {
-    const fromRow = Math.floor((fromIndex - 1) / 8);
-    const fromCol = (fromIndex - 1) % 8;
-    const toRow = Math.floor((toIndex - 1) / 8);
-    const toCol = (toIndex - 1) % 8;
-
-    const movingPiece = this.grid[fromRow][fromCol];
-    if (!movingPiece) return false;
-
-    const targetPiece = this.grid[toRow][toCol];
-    const isPawnMove = movingPiece.type === PIECE_TYPE.PAWN;
-    const direction = movingPiece.color === COLOR.WHITE ? -1 : 1;
-    const isEnPassant = isPawnMove && !targetPiece && Math.abs(toCol - fromCol) === 1 &&
-      this.enPassantTarget === `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
-    const isCastling = movingPiece.type === PIECE_TYPE.KING && Math.abs(toCol - fromCol) === 2;
-    const isCapture = targetPiece !== null || isEnPassant;
-
-    // Build standard algebraic notation (SAN) before state update
-    if (isCastling) {
-      this.recordMove(toCol > fromCol ? 'O-O' : 'O-O-O');
-    } else {
-      const promotionSuffix = isPawnMove && (toRow === 0 || toRow === 7)
-        ? `=${promotionType[0]}`
-        : '';
-      const piecePrefix = isPawnMove
-        ? (isCapture ? String.fromCharCode(97 + fromCol) : '')
-        : movingPiece.type.toUpperCase();
-      const captureSymbol = isCapture ? 'x' : '';
-      const destSquare = `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
-      this.recordMove(`${piecePrefix}${captureSymbol}${destSquare}${promotionSuffix}`);
-    }
-
-    if (isEnPassant) {
-      this.grid[toRow - direction][toCol] = null;
-    }
-
-    if (isCastling) {
-      const rookFromCol = toCol > fromCol ? 7 : 0;
-      const rookToCol = toCol > fromCol ? 5 : 3;
-      this.grid[toRow][rookToCol] = this.grid[toRow][rookFromCol];
-      this.grid[toRow][rookFromCol] = null;
-    }
-
-    if (isPawnMove && (toRow === 0 || toRow === 7)) {
-      const validPromotions = [
-        PIECE_TYPE.QUEEN,
-        PIECE_TYPE.ROOK,
-        PIECE_TYPE.BISHOP,
-        PIECE_TYPE.KNIGHT,
-      ];
-      if (!validPromotions.includes(promotionType)) {
-        throw new Error('Invalid promotion piece');
+  // Localizar el Rey del color especificado
+  findKing(color) {
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const piece = this.grid[r][c];
+        if (piece && piece.type === PIECE_TYPE.KING && piece.color === color) {
+          return { row: r, col: c };
+        }
       }
-      this.grid[toRow][toCol] = new Piece(movingPiece.color, promotionType);
-    } else {
-      this.grid[toRow][toCol] = movingPiece;
     }
-
-    this.grid[fromRow][fromCol] = null;
-
-    this.updateCastlingRights(movingPiece, fromRow, fromCol, targetPiece, toRow, toCol);
-    this.enPassantTarget = null;
-    if (isPawnMove && Math.abs(toRow - fromRow) === 2) {
-      this.enPassantTarget = `${String.fromCharCode(97 + fromCol)}${8 - (fromRow + direction)}`;
-    }
-    this.halfMoveClock = isPawnMove || isCapture ? 0 : this.halfMoveClock + 1;
-
-    // Increment fullMoveNumber when black completes a turn
-    if (this.activeColor === COLOR.BLACK) {
-      this.fullMoveNumber += 1;
-    }
-
-    // Toggle active color
-    this.activeColor = this.activeColor === COLOR.WHITE ? COLOR.BLACK : COLOR.WHITE;
-
-    return true;
+    return null;
   }
 
-  // Bounds check helper
-  isInBounds(row, col) {
-    return row >= 0 && row < 8 && col >= 0 && col < 8;
+  // Verifica si el Rey del color indicado está bajo jaque
+  isInCheck(color = this.activeColor) {
+    const kingPos = this.findKing(color);
+    if (!kingPos) return false;
+    return this.isSquareAttacked(kingPos.row, kingPos.col, this.oppositeColor(color));
   }
 
-  // Convert row/col to 1-64 index for Vue UI
-  toIndex(row, col) {
-    return row * 8 + col + 1;
+  // Retorna el índice 1-64 del Rey que está en jaque (o null si no hay ningún rey en jaque)
+  getCheckedKingIndex(color = this.activeColor) {
+    if (this.isInCheck(color)) {
+      const kingPos = this.findKing(color);
+      if (kingPos) {
+        return this.toIndex(kingPos.row, kingPos.col);
+      }
+    }
+    return null;
   }
 
-  /**
-   * Calculates valid destination indices (1-64) for a piece at (row, col)
-   */
-  getValidMoves(row, col) {
+  // Obtiene movimientos pseudolegales (sin filtrar rey en jaque)
+  getPseudoLegalMoves(row, col) {
     const piece = this.grid[row][col];
     if (!piece || piece.color !== this.activeColor) return [];
 
@@ -197,7 +137,207 @@ export class Board {
     return validMoves;
   }
 
-  // Helper: Sliding pieces (Rook, Bishop, Queen)
+  // Filtra movimientos pseudolegales dejando únicamente los legales (no dejan al rey en jaque)
+  getLegalMoves(row, col) {
+    const pseudoMoves = this.getPseudoLegalMoves(row, col);
+    const piece = this.grid[row][col];
+    if (!piece) return [];
+
+    const legalMoves = [];
+
+    for (const toIndex of pseudoMoves) {
+      if (this.isMoveLegal(row, col, toIndex)) {
+        legalMoves.push(toIndex);
+      }
+    }
+
+    return legalMoves;
+  }
+
+  // Wrapper para mantener compatibilidad con la UI previa
+  getValidMoves(row, col) {
+    return this.getLegalMoves(row, col);
+  }
+
+  // Simula temporalmente la jugada en la matriz para verificar si deja al rey en jaque
+  isMoveLegal(fromRow, fromCol, toIndex) {
+    const toRow = Math.floor((toIndex - 1) / 8);
+    const toCol = (toIndex - 1) % 8;
+
+    const movingPiece = this.grid[fromRow][fromCol];
+    const targetPiece = this.grid[toRow][toCol];
+    const originalEnPassant = this.enPassantTarget;
+
+    const isPawnMove = movingPiece.type === PIECE_TYPE.PAWN;
+    const direction = movingPiece.color === COLOR.WHITE ? -1 : 1;
+    const isEnPassant =
+      isPawnMove &&
+      !targetPiece &&
+      Math.abs(toCol - fromCol) === 1 &&
+      this.enPassantTarget === `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
+
+    let epCapturedPiece = null;
+    let epCapturedRow = -1;
+
+    // Aplicar simulación
+    if (isEnPassant) {
+      epCapturedRow = toRow - direction;
+      epCapturedPiece = this.grid[epCapturedRow][toCol];
+      this.grid[epCapturedRow][toCol] = null;
+    }
+
+    this.grid[toRow][toCol] = movingPiece;
+    this.grid[fromRow][fromCol] = null;
+
+    // Evaluar si el rey quedó en jaque
+    const inCheck = this.isInCheck(movingPiece.color);
+
+    // Revertir cambios
+    this.grid[fromRow][fromCol] = movingPiece;
+    this.grid[toRow][toCol] = targetPiece;
+    if (isEnPassant) {
+      this.grid[epCapturedRow][toCol] = epCapturedPiece;
+    }
+    this.enPassantTarget = originalEnPassant;
+
+    return !inCheck;
+  }
+
+  // Comprueba si un jugador tiene al menos un movimiento legal disponible
+  hasLegalMoves(color = this.activeColor) {
+    for (let r = 0; r < 8; r++) {
+      for (let c = 0; c < 8; c++) {
+        const piece = this.grid[r][c];
+        if (piece && piece.color === color) {
+          const originalActive = this.activeColor;
+          this.activeColor = color;
+          const moves = this.getLegalMoves(r, c);
+          this.activeColor = originalActive;
+
+          if (moves.length > 0) return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // Detección de Jaque Mate
+  isCheckmate(color = this.activeColor) {
+    return this.isInCheck(color) && !this.hasLegalMoves(color);
+  }
+
+  // Detección de Rey Ahogado / Tablas
+  isStalemate(color = this.activeColor) {
+    return !this.isInCheck(color) && !this.hasLegalMoves(color);
+  }
+
+  // Ejecutar un movimiento en el tablero usando el índice 1-64
+  movePiece(fromIndex, toIndex, promotionType = PIECE_TYPE.QUEEN) {
+    const fromRow = Math.floor((fromIndex - 1) / 8);
+    const fromCol = (fromIndex - 1) % 8;
+    const toRow = Math.floor((toIndex - 1) / 8);
+    const toCol = (toIndex - 1) % 8;
+
+    const movingPiece = this.grid[fromRow][fromCol];
+    if (!movingPiece || movingPiece.color !== this.activeColor) return false;
+
+    const legalMoves = this.getLegalMoves(fromRow, fromCol);
+    if (!legalMoves.includes(toIndex)) return false;
+
+    const targetPiece = this.grid[toRow][toCol];
+    const isPawnMove = movingPiece.type === PIECE_TYPE.PAWN;
+    const direction = movingPiece.color === COLOR.WHITE ? -1 : 1;
+    const isEnPassant =
+      isPawnMove &&
+      !targetPiece &&
+      Math.abs(toCol - fromCol) === 1 &&
+      this.enPassantTarget === `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
+    const isCastling = movingPiece.type === PIECE_TYPE.KING && Math.abs(toCol - fromCol) === 2;
+    const isCapture = targetPiece !== null || isEnPassant;
+
+    // Movimiento de peón al paso
+    if (isEnPassant) {
+      this.grid[toRow - direction][toCol] = null;
+    }
+
+    // Movimiento de enroque
+    if (isCastling) {
+      const rookFromCol = toCol > fromCol ? 7 : 0;
+      const rookToCol = toCol > fromCol ? 5 : 3;
+      this.grid[toRow][rookToCol] = this.grid[toRow][rookFromCol];
+      this.grid[toRow][rookFromCol] = null;
+    }
+
+    // Coronación de peón
+    if (isPawnMove && (toRow === 0 || toRow === 7)) {
+      const validPromotions = [
+        PIECE_TYPE.QUEEN,
+        PIECE_TYPE.ROOK,
+        PIECE_TYPE.BISHOP,
+        PIECE_TYPE.KNIGHT,
+      ];
+      if (!validPromotions.includes(promotionType)) {
+        throw new Error('Tipo de coronación no válido');
+      }
+      this.grid[toRow][toCol] = new Piece(movingPiece.color, promotionType);
+    } else {
+      this.grid[toRow][toCol] = movingPiece;
+    }
+
+    this.grid[fromRow][fromCol] = null;
+
+    this.updateCastlingRights(movingPiece, fromRow, fromCol, targetPiece, toRow, toCol);
+    this.enPassantTarget = null;
+    if (isPawnMove && Math.abs(toRow - fromRow) === 2) {
+      this.enPassantTarget = `${String.fromCharCode(97 + fromCol)}${8 - (fromRow + direction)}`;
+    }
+    this.halfMoveClock = isPawnMove || isCapture ? 0 : this.halfMoveClock + 1;
+
+    const nextColor = this.oppositeColor(this.activeColor);
+
+    // Determinar el sufijo SAN (+ para jaque, # para mate)
+    let sanSuffix = '';
+    if (this.isCheckmate(nextColor)) {
+      sanSuffix = '#';
+    } else if (this.isInCheck(nextColor)) {
+      sanSuffix = '+';
+    }
+
+    // Construir notación algebraíca estándar (SAN)
+    if (isCastling) {
+      this.recordMove(`${toCol > fromCol ? 'O-O' : 'O-O-O'}${sanSuffix}`);
+    } else {
+      const promotionSuffix =
+        isPawnMove && (toRow === 0 || toRow === 7) ? `=${promotionType[0].toUpperCase()}` : '';
+      const piecePrefix = isPawnMove
+        ? isCapture
+          ? String.fromCharCode(97 + fromCol)
+          : ''
+        : movingPiece.type.toUpperCase();
+      const captureSymbol = isCapture ? 'x' : '';
+      const destSquare = `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
+      this.recordMove(`${piecePrefix}${captureSymbol}${destSquare}${promotionSuffix}${sanSuffix}`);
+    }
+
+    if (this.activeColor === COLOR.BLACK) {
+      this.fullMoveNumber += 1;
+    }
+
+    this.activeColor = nextColor;
+    return true;
+  }
+
+  // Validación de límites de la matriz
+  isInBounds(row, col) {
+    return row >= 0 && row < 8 && col >= 0 && col < 8;
+  }
+
+  // Convertir coordenadas (fila, columna) a un índice de 1 a 64
+  toIndex(row, col) {
+    return row * 8 + col + 1;
+  }
+
+  // Helper: Piezas deslizantes (Torre, Alfil, Dama)
   getSlidingMoves(row, col, piece, directions, validMoves) {
     for (const [dRow, dCol] of directions) {
       let r = row + dRow;
@@ -209,9 +349,9 @@ export class Board {
           validMoves.push(this.toIndex(r, c));
         } else {
           if (target.color !== piece.color) {
-            validMoves.push(this.toIndex(r, c)); // Capture enemy
+            validMoves.push(this.toIndex(r, c));
           }
-          break; // Stop raycasting at any piece
+          break;
         }
         r += dRow;
         c += dCol;
@@ -219,7 +359,7 @@ export class Board {
     }
   }
 
-  // Helper: Non-sliding single step pieces (Knight, King)
+  // Helper: Piezas de un solo paso (Caballo, Rey)
   getStepMoves(row, col, piece, offsets, validMoves) {
     for (const [dRow, dCol] of offsets) {
       const r = row + dRow;
@@ -234,24 +374,24 @@ export class Board {
     }
   }
 
-  // Helper: Pawn special forward and diagonal capture rules
+  // Helper: Reglas de avance y captura de peones
   getPawnMoves(row, col, piece, validMoves) {
     const direction = piece.color === COLOR.WHITE ? -1 : 1;
     const startRank = piece.color === COLOR.WHITE ? 6 : 1;
 
-    // 1. One step forward
+    // Avance de una casilla
     const forwardRow = row + direction;
     if (this.isInBounds(forwardRow, col) && !this.grid[forwardRow][col]) {
       validMoves.push(this.toIndex(forwardRow, col));
 
-      // 2. Two steps forward from initial rank
+      // Avance de dos casillas desde la posición inicial
       const doubleForwardRow = row + 2 * direction;
       if (row === startRank && !this.grid[doubleForwardRow][col]) {
         validMoves.push(this.toIndex(doubleForwardRow, col));
       }
     }
 
-    // 3. Diagonal captures
+    // Capturas diagonales
     for (const dCol of [-1, 1]) {
       const capRow = row + direction;
       const capCol = col + dCol;
@@ -271,19 +411,33 @@ export class Board {
     const homeRow = piece.color === COLOR.WHITE ? 7 : 0;
     if (row !== homeRow || col !== 4 || this.isSquareAttacked(row, col, this.oppositeColor(piece.color))) return;
 
-    const rights = piece.color === COLOR.WHITE
-      ? ['whiteKingside', 'whiteQueenside']
-      : ['blackKingside', 'blackQueenside'];
+    const rights =
+      piece.color === COLOR.WHITE
+        ? ['whiteKingside', 'whiteQueenside']
+        : ['blackKingside', 'blackQueenside'];
     const enemyColor = this.oppositeColor(piece.color);
 
-    if (this.castlingRights[rights[0]] && !this.grid[row][5] && !this.grid[row][6] &&
-        this.grid[row][7]?.type === PIECE_TYPE.ROOK && this.grid[row][7]?.color === piece.color &&
-        !this.isSquareAttacked(row, 5, enemyColor) && !this.isSquareAttacked(row, 6, enemyColor)) {
+    if (
+      this.castlingRights[rights[0]] &&
+      !this.grid[row][5] &&
+      !this.grid[row][6] &&
+      this.grid[row][7]?.type === PIECE_TYPE.ROOK &&
+      this.grid[row][7]?.color === piece.color &&
+      !this.isSquareAttacked(row, 5, enemyColor) &&
+      !this.isSquareAttacked(row, 6, enemyColor)
+    ) {
       validMoves.push(this.toIndex(row, 6));
     }
-    if (this.castlingRights[rights[1]] && !this.grid[row][1] && !this.grid[row][2] && !this.grid[row][3] &&
-        this.grid[row][0]?.type === PIECE_TYPE.ROOK && this.grid[row][0]?.color === piece.color &&
-        !this.isSquareAttacked(row, 3, enemyColor) && !this.isSquareAttacked(row, 2, enemyColor)) {
+    if (
+      this.castlingRights[rights[1]] &&
+      !this.grid[row][1] &&
+      !this.grid[row][2] &&
+      !this.grid[row][3] &&
+      this.grid[row][0]?.type === PIECE_TYPE.ROOK &&
+      this.grid[row][0]?.color === piece.color &&
+      !this.isSquareAttacked(row, 3, enemyColor) &&
+      !this.isSquareAttacked(row, 2, enemyColor)
+    ) {
       validMoves.push(this.toIndex(row, 2));
     }
   }
@@ -295,22 +449,34 @@ export class Board {
   isSquareAttacked(row, col, attackerColor) {
     const pawnRow = row + (attackerColor === COLOR.WHITE ? 1 : -1);
     for (const pawnCol of [col - 1, col + 1]) {
-      if (this.isInBounds(pawnRow, pawnCol) && this.grid[pawnRow][pawnCol]?.color === attackerColor &&
-          this.grid[pawnRow][pawnCol]?.type === PIECE_TYPE.PAWN) return true;
+      if (
+        this.isInBounds(pawnRow, pawnCol) &&
+        this.grid[pawnRow][pawnCol]?.color === attackerColor &&
+        this.grid[pawnRow][pawnCol]?.type === PIECE_TYPE.PAWN
+      )
+        return true;
     }
 
     for (const [dRow, dCol] of DIRECTIONS.KNIGHT) {
       const r = row + dRow;
       const c = col + dCol;
-      if (this.isInBounds(r, c) && this.grid[r][c]?.color === attackerColor &&
-          this.grid[r][c]?.type === PIECE_TYPE.KNIGHT) return true;
+      if (
+        this.isInBounds(r, c) &&
+        this.grid[r][c]?.color === attackerColor &&
+        this.grid[r][c]?.type === PIECE_TYPE.KNIGHT
+      )
+        return true;
     }
 
     for (const [dRow, dCol, types] of [
-      [-1, 0, [PIECE_TYPE.ROOK, PIECE_TYPE.QUEEN]], [1, 0, [PIECE_TYPE.ROOK, PIECE_TYPE.QUEEN]],
-      [0, -1, [PIECE_TYPE.ROOK, PIECE_TYPE.QUEEN]], [0, 1, [PIECE_TYPE.ROOK, PIECE_TYPE.QUEEN]],
-      [-1, -1, [PIECE_TYPE.BISHOP, PIECE_TYPE.QUEEN]], [-1, 1, [PIECE_TYPE.BISHOP, PIECE_TYPE.QUEEN]],
-      [1, -1, [PIECE_TYPE.BISHOP, PIECE_TYPE.QUEEN]], [1, 1, [PIECE_TYPE.BISHOP, PIECE_TYPE.QUEEN]],
+      [-1, 0, [PIECE_TYPE.ROOK, PIECE_TYPE.QUEEN]],
+      [1, 0, [PIECE_TYPE.ROOK, PIECE_TYPE.QUEEN]],
+      [0, -1, [PIECE_TYPE.ROOK, PIECE_TYPE.QUEEN]],
+      [0, 1, [PIECE_TYPE.ROOK, PIECE_TYPE.QUEEN]],
+      [-1, -1, [PIECE_TYPE.BISHOP, PIECE_TYPE.QUEEN]],
+      [-1, 1, [PIECE_TYPE.BISHOP, PIECE_TYPE.QUEEN]],
+      [1, -1, [PIECE_TYPE.BISHOP, PIECE_TYPE.QUEEN]],
+      [1, 1, [PIECE_TYPE.BISHOP, PIECE_TYPE.QUEEN]],
     ]) {
       let r = row + dRow;
       let c = col + dCol;
