@@ -10,7 +10,6 @@ export class Board {
     this.loadFEN(fen);
   }
 
-  // Cargar estado desde un FEN
   loadFEN(fenString) {
     const parsed = FENHandler.parse(fenString);
     this.grid = parsed.grid;
@@ -21,7 +20,6 @@ export class Board {
     this.fullMoveNumber = parsed.fullMoveNumber;
   }
 
-  // Exportar estado actual a FEN
   toFEN() {
     return FENHandler.generate({
       grid: this.grid,
@@ -33,7 +31,6 @@ export class Board {
     });
   }
 
-  // Historial PGN
   recordMove(sanMove) {
     this.pgnHistory.push({
       moveNumber: this.fullMoveNumber,
@@ -65,21 +62,18 @@ export class Board {
     return `${headerLines.join('\n')}\n\n${pgnBody.trim()}`;
   }
 
-  // Helper: Obtener pieza mediante índice 1-64
   getPieceByIndex(index) {
     const row = Math.floor((index - 1) / 8);
     const col = (index - 1) % 8;
     return this.grid[row][col];
   }
 
-  // Helper: Obtener movimientos legales mediante índice 1-64
   getValidMovesByIndex(index) {
     const row = Math.floor((index - 1) / 8);
     const col = (index - 1) % 8;
     return this.getLegalMoves(row, col);
   }
 
-  // Localizar el Rey del color especificado
   findKing(color) {
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
@@ -92,14 +86,12 @@ export class Board {
     return null;
   }
 
-  // Verifica si el Rey del color indicado está bajo jaque
   isInCheck(color = this.activeColor) {
     const kingPos = this.findKing(color);
     if (!kingPos) return false;
     return this.isSquareAttacked(kingPos.row, kingPos.col, this.oppositeColor(color));
   }
 
-  // Retorna el índice 1-64 del Rey que está en jaque (o null si no hay ningún rey en jaque)
   getCheckedKingIndex(color = this.activeColor) {
     if (this.isInCheck(color)) {
       const kingPos = this.findKing(color);
@@ -110,7 +102,6 @@ export class Board {
     return null;
   }
 
-  // Obtiene movimientos pseudolegales (sin filtrar rey en jaque)
   getPseudoLegalMoves(row, col) {
     const piece = this.grid[row][col];
     if (!piece || piece.color !== this.activeColor) return [];
@@ -137,7 +128,6 @@ export class Board {
     return validMoves;
   }
 
-  // Filtra movimientos pseudolegales dejando únicamente los legales (no dejan al rey en jaque)
   getLegalMoves(row, col) {
     const pseudoMoves = this.getPseudoLegalMoves(row, col);
     const piece = this.grid[row][col];
@@ -154,12 +144,10 @@ export class Board {
     return legalMoves;
   }
 
-  // Wrapper para mantener compatibilidad con la UI previa
   getValidMoves(row, col) {
     return this.getLegalMoves(row, col);
   }
 
-  // Simula temporalmente la jugada en la matriz para verificar si deja al rey en jaque
   isMoveLegal(fromRow, fromCol, toIndex) {
     const toRow = Math.floor((toIndex - 1) / 8);
     const toCol = (toIndex - 1) % 8;
@@ -170,16 +158,16 @@ export class Board {
 
     const isPawnMove = movingPiece.type === PIECE_TYPE.PAWN;
     const direction = movingPiece.color === COLOR.WHITE ? -1 : 1;
+    const targetSquareName = `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
     const isEnPassant =
       isPawnMove &&
       !targetPiece &&
       Math.abs(toCol - fromCol) === 1 &&
-      this.enPassantTarget === `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
+      this.enPassantTarget === targetSquareName;
 
     let epCapturedPiece = null;
     let epCapturedRow = -1;
 
-    // Aplicar simulación
     if (isEnPassant) {
       epCapturedRow = toRow - direction;
       epCapturedPiece = this.grid[epCapturedRow][toCol];
@@ -189,10 +177,8 @@ export class Board {
     this.grid[toRow][toCol] = movingPiece;
     this.grid[fromRow][fromCol] = null;
 
-    // Evaluar si el rey quedó en jaque
     const inCheck = this.isInCheck(movingPiece.color);
 
-    // Revertir cambios
     this.grid[fromRow][fromCol] = movingPiece;
     this.grid[toRow][toCol] = targetPiece;
     if (isEnPassant) {
@@ -203,7 +189,6 @@ export class Board {
     return !inCheck;
   }
 
-  // Comprueba si un jugador tiene al menos un movimiento legal disponible
   hasLegalMoves(color = this.activeColor) {
     for (let r = 0; r < 8; r++) {
       for (let c = 0; c < 8; c++) {
@@ -221,17 +206,14 @@ export class Board {
     return false;
   }
 
-  // Detección de Jaque Mate
   isCheckmate(color = this.activeColor) {
     return this.isInCheck(color) && !this.hasLegalMoves(color);
   }
 
-  // Detección de Rey Ahogado / Tablas
   isStalemate(color = this.activeColor) {
     return !this.isInCheck(color) && !this.hasLegalMoves(color);
   }
 
-  // Ejecutar un movimiento en el tablero usando el índice 1-64
   movePiece(fromIndex, toIndex, promotionType = PIECE_TYPE.QUEEN) {
     const fromRow = Math.floor((fromIndex - 1) / 8);
     const fromCol = (fromIndex - 1) % 8;
@@ -247,20 +229,19 @@ export class Board {
     const targetPiece = this.grid[toRow][toCol];
     const isPawnMove = movingPiece.type === PIECE_TYPE.PAWN;
     const direction = movingPiece.color === COLOR.WHITE ? -1 : 1;
+    const targetSquareName = `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
     const isEnPassant =
       isPawnMove &&
       !targetPiece &&
       Math.abs(toCol - fromCol) === 1 &&
-      this.enPassantTarget === `${String.fromCharCode(97 + toCol)}${8 - toRow}`;
+      this.enPassantTarget === targetSquareName;
     const isCastling = movingPiece.type === PIECE_TYPE.KING && Math.abs(toCol - fromCol) === 2;
     const isCapture = targetPiece !== null || isEnPassant;
 
-    // Movimiento de peón al paso
     if (isEnPassant) {
       this.grid[toRow - direction][toCol] = null;
     }
 
-    // Movimiento de enroque
     if (isCastling) {
       const rookFromCol = toCol > fromCol ? 7 : 0;
       const rookToCol = toCol > fromCol ? 5 : 3;
@@ -268,7 +249,6 @@ export class Board {
       this.grid[toRow][rookFromCol] = null;
     }
 
-    // Coronación de peón
     if (isPawnMove && (toRow === 0 || toRow === 7)) {
       const validPromotions = [
         PIECE_TYPE.QUEEN,
@@ -277,7 +257,7 @@ export class Board {
         PIECE_TYPE.KNIGHT,
       ];
       if (!validPromotions.includes(promotionType)) {
-        throw new Error('Tipo de coronación no válido');
+        throw new Error('Invalid promotion type');
       }
       this.grid[toRow][toCol] = new Piece(movingPiece.color, promotionType);
     } else {
@@ -289,13 +269,13 @@ export class Board {
     this.updateCastlingRights(movingPiece, fromRow, fromCol, targetPiece, toRow, toCol);
     this.enPassantTarget = null;
     if (isPawnMove && Math.abs(toRow - fromRow) === 2) {
-      this.enPassantTarget = `${String.fromCharCode(97 + fromCol)}${8 - (fromRow + direction)}`;
+      this.enPassantTarget = `${String.fromCharCode(97 + fromCol)}${8 - (fromRow + direction)}
+`;
     }
     this.halfMoveClock = isPawnMove || isCapture ? 0 : this.halfMoveClock + 1;
 
     const nextColor = this.oppositeColor(this.activeColor);
 
-    // Determinar el sufijo SAN (+ para jaque, # para mate)
     let sanSuffix = '';
     if (this.isCheckmate(nextColor)) {
       sanSuffix = '#';
@@ -303,7 +283,6 @@ export class Board {
       sanSuffix = '+';
     }
 
-    // Construir notación algebraíca estándar (SAN)
     if (isCastling) {
       this.recordMove(`${toCol > fromCol ? 'O-O' : 'O-O-O'}${sanSuffix}`);
     } else {
@@ -327,17 +306,14 @@ export class Board {
     return true;
   }
 
-  // Validación de límites de la matriz
   isInBounds(row, col) {
     return row >= 0 && row < 8 && col >= 0 && col < 8;
   }
 
-  // Convertir coordenadas (fila, columna) a un índice de 1 a 64
   toIndex(row, col) {
     return row * 8 + col + 1;
   }
 
-  // Helper: Piezas deslizantes (Torre, Alfil, Dama)
   getSlidingMoves(row, col, piece, directions, validMoves) {
     for (const [dRow, dCol] of directions) {
       let r = row + dRow;
@@ -359,7 +335,6 @@ export class Board {
     }
   }
 
-  // Helper: Piezas de un solo paso (Caballo, Rey)
   getStepMoves(row, col, piece, offsets, validMoves) {
     for (const [dRow, dCol] of offsets) {
       const r = row + dRow;
@@ -374,33 +349,30 @@ export class Board {
     }
   }
 
-  // Helper: Reglas de avance y captura de peones
   getPawnMoves(row, col, piece, validMoves) {
     const direction = piece.color === COLOR.WHITE ? -1 : 1;
     const startRank = piece.color === COLOR.WHITE ? 6 : 1;
 
-    // Avance de una casilla
     const forwardRow = row + direction;
     if (this.isInBounds(forwardRow, col) && !this.grid[forwardRow][col]) {
       validMoves.push(this.toIndex(forwardRow, col));
 
-      // Avance de dos casillas desde la posición inicial
       const doubleForwardRow = row + 2 * direction;
       if (row === startRank && !this.grid[doubleForwardRow][col]) {
         validMoves.push(this.toIndex(doubleForwardRow, col));
       }
     }
 
-    // Capturas diagonales
     for (const dCol of [-1, 1]) {
       const capRow = row + direction;
       const capCol = col + dCol;
 
       if (this.isInBounds(capRow, capCol)) {
         const target = this.grid[capRow][capCol];
+        const capSquareName = `${String.fromCharCode(97 + capCol)}${8 - capRow}`;
         if (target && target.color !== piece.color) {
           validMoves.push(this.toIndex(capRow, capCol));
-        } else if (!target && this.enPassantTarget === `${String.fromCharCode(97 + capCol)}${8 - capRow}`) {
+        } else if (!target && this.enPassantTarget === capSquareName) {
           validMoves.push(this.toIndex(capRow, capCol));
         }
       }

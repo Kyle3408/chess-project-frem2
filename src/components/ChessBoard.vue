@@ -1,71 +1,79 @@
 <!-- src/components/Chessboard.vue -->
 <template>
-  <div class="chessboard">
-    <div 
-      v-for="index in 64" 
-      :key="index" 
-      class="square"
-      :class="[
-        isDark(index) ? 'dark' : 'light',
-        {
-          'selected': selectedSquare === index,
-          'highlight': possibleMoves.includes(index)
-        }
-      ]"
-      @click="handleSquareClick(index)"
-    >
-      <!-- Move indicator dot for empty target squares -->
-      <span 
-        v-if="possibleMoves.includes(index) && !getPiece(index)" 
-        class="move-dot"
-      ></span>
-
-      <!-- Chess piece icon -->
-      <span
-        v-if="getPiece(index)"
-        class="piece"
-        :class="getPiece(index).color === COLOR.WHITE ? 'white-piece' : 'black-piece'"
-      >
-        {{ getPiece(index).symbol }}
-      </span>
-
-      <!-- Rank labels (1-8): Shown on the left column (files A) -->
-      <span v-if="getCol(index) === 0" class="label rank-label">
-        {{ getRankLabel(index) }}
-      </span>
-
-      <!-- File labels (A-H): Shown on the bottom row (ranks 1) -->
-      <span v-if="getRow(index) === 7" class="label file-label">
-        {{ getFileLabel(index) }}
-      </span>
+  <div class="chessboard-container">
+    <!-- Active Turn Status Bar -->
+    <div class="status-bar" :class="board.activeColor">
+      Turn: <strong>{{ board.activeColor === COLOR.WHITE ? 'White' : 'Black' }}</strong>
+      <span v-if="board.isInCheck(board.activeColor)" class="check-warning"> (CHECK)</span>
     </div>
 
-    <div v-if="promotionMove" class="promotion-menu">
-      <button
-        v-for="option in promotionOptions"
-        :key="option.type"
-        type="button"
-        class="promotion-option"
-        @click="completePromotion(option.type)"
+    <div class="chessboard">
+      <div 
+        v-for="index in 64" 
+        :key="index" 
+        class="square"
+        :class="[
+          isDark(index) ? 'dark' : 'light',
+          {
+            'selected': selectedSquare === index,
+            'highlight': possibleMoves.includes(index),
+            'in-check': index === checkedKingIndex
+          }
+        ]"
+        @click="handleSquareClick(index)"
       >
-        {{ option.label }}
-      </button>
+        <!-- Move indicator dot for empty target squares -->
+        <span 
+          v-if="possibleMoves.includes(index) && !getPiece(index)" 
+          class="move-dot"
+        ></span>
+
+        <!-- Chess piece icon -->
+        <span
+          v-if="getPiece(index)"
+          class="piece"
+          :class="getPiece(index).color === COLOR.WHITE ? 'white-piece' : 'black-piece'"
+        >
+          {{ getPiece(index).symbol }}
+        </span>
+
+        <!-- Rank labels (1-8) -->
+        <span v-if="getCol(index) === 0" class="label rank-label">
+          {{ getRankLabel(index) }}
+        </span>
+
+        <!-- File labels (A-H) -->
+        <span v-if="getRow(index) === 7" class="label file-label">
+          {{ getFileLabel(index) }}
+        </span>
+      </div>
+
+      <!-- Pawn Promotion Selection Menu -->
+      <div v-if="promotionMove" class="promotion-menu">
+        <button
+          v-for="option in promotionOptions"
+          :key="option.type"
+          type="button"
+          class="promotion-option"
+          @click="completePromotion(option.type)"
+        >
+          {{ option.label }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { shallowRef, ref } from 'vue';
+import { shallowRef, ref, computed } from 'vue';
 import { Board } from '../chess_core/board.js';
 import { COLOR, PIECE_TYPE } from '../chess_core/piece.js';
 
-// Use shallowRef to keep Board instance clean
 const board = shallowRef(new Board());
-
-// Sub-task 4: Reactive state for selected piece and valid target squares
 const selectedSquare = ref(null);
 const possibleMoves = ref([]);
 const promotionMove = ref(null);
+
 const promotionOptions = [
   { type: PIECE_TYPE.QUEEN, label: 'Queen' },
   { type: PIECE_TYPE.ROOK, label: 'Rook' },
@@ -73,13 +81,15 @@ const promotionOptions = [
   { type: PIECE_TYPE.KNIGHT, label: 'Knight' },
 ];
 
-// Core helper getters
 const getPiece = (index) => board.value.getPieceByIndex(index);
 const getRow = (index) => Math.floor((index - 1) / 8);
 const getCol = (index) => (index - 1) % 8;
 const isDark = (index) => (getRow(index) + getCol(index)) % 2 === 1;
 const getRankLabel = (index) => 8 - getRow(index);
 const getFileLabel = (index) => String.fromCharCode(97 + getCol(index));
+
+const checkedKingIndex = computed(() => board.value.getCheckedKingIndex());
+
 const isPromotionMove = (fromIndex, toIndex) => {
   const piece = getPiece(fromIndex);
   const destinationRow = getRow(toIndex);
@@ -92,21 +102,22 @@ const completePromotion = (promotionType) => {
   board.value.movePiece(
     promotionMove.value.from,
     promotionMove.value.to,
-    promotionType,
+    promotionType
   );
+
   promotionMove.value = null;
   selectedSquare.value = null;
   possibleMoves.value = [];
-  board.value = board.value;
+  board.value = board.value; // Force shallowRef trigger
 };
 
 /**
- * Sub-task 4: Selection and movement handler
+ * TURN MANAGEMENT CLICK HANDLER
  */
 const handleSquareClick = (index) => {
   const clickedPiece = getPiece(index);
 
-  // 1. If clicking a highlighted destination tile, execute move
+  // 1. Move piece if clicking an available move square
   if (selectedSquare.value !== null && possibleMoves.value.includes(index)) {
     if (isPromotionMove(selectedSquare.value, index)) {
       promotionMove.value = { from: selectedSquare.value, to: index };
@@ -114,37 +125,65 @@ const handleSquareClick = (index) => {
     }
 
     board.value.movePiece(selectedSquare.value, index);
-    
-    // Clear selection state
     selectedSquare.value = null;
     possibleMoves.value = [];
-    
-    // Re-assign board value to trigger shallowRef reactivity in Vue
-    board.value = board.value;
+    board.value = board.value; // Trigger reactivity
     return;
   }
 
-  // 2. If clicking the currently selected square: toggle selection off
+  // 2. Deselect if clicking the same selected piece again
   if (selectedSquare.value === index) {
     selectedSquare.value = null;
     possibleMoves.value = [];
     return;
   }
 
-  // 3. If clicking a friendly piece matching the active turn, select (or reselect) it
+  // 3. TURN ENFORCEMENT: Only select if piece belongs to the active turn player
   if (clickedPiece && clickedPiece.color === board.value.activeColor) {
     selectedSquare.value = index;
     possibleMoves.value = board.value.getValidMovesByIndex(index);
     return;
   }
 
-  // 4. Clear selection on any other click
+  // 4. Reset selection when clicking empty/invalid squares
   selectedSquare.value = null;
   possibleMoves.value = [];
 };
 </script>
 
 <style scoped>
+.chessboard-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-bar {
+  font-size: 16px;
+  font-family: sans-serif;
+  padding: 6px 16px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background: #f4f4f4;
+  text-transform: capitalize;
+}
+
+.status-bar.white {
+  background: #ffffff;
+  color: #222;
+}
+
+.status-bar.black {
+  background: #222222;
+  color: #fff;
+}
+
+.check-warning {
+  color: #e53935;
+  font-weight: bold;
+}
+
 .chessboard {
   position: relative;
   display: grid;
@@ -165,13 +204,15 @@ const handleSquareClick = (index) => {
   background: #fff;
   border: 2px solid #333;
   transform: translate(-50%, -50%);
-  z-index: 2;
+  z-index: 10;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3);
 }
 
 .promotion-option {
-  padding: 8px 10px;
+  padding: 8px 12px;
   border: 1px solid #999;
   background: #f0d9b5;
+  font-weight: bold;
   cursor: pointer;
 }
 
@@ -192,22 +233,22 @@ const handleSquareClick = (index) => {
   color: #f0d9b5;
 }
 
-/* Highlight square of currently selected piece */
 .square.selected {
   background-color: #baca44 !important;
 }
 
-/* Cursor pointer for valid target squares */
 .square.highlight {
   cursor: pointer;
 }
 
-/* Capture highlight overlay on enemy piece target squares */
 .square.highlight:has(.piece) {
-  background-color: #e1000088 !important;
+  background-color: rgba(225, 0, 0, 0.55) !important;
 }
 
-/* Visual dot indicator for empty destination squares */
+.square.in-check {
+  background-color: #ff5252 !important;
+}
+
 .move-dot {
   width: 18px;
   height: 18px;
@@ -226,7 +267,7 @@ const handleSquareClick = (index) => {
 
 .white-piece {
   color: #fff;
-  text-shadow: 0 0 1px #111;
+  text-shadow: 0 0 2px #111;
 }
 
 .black-piece {
