@@ -1,10 +1,27 @@
-<!-- src/components/Chessboard.vue -->
+<!-- src/components/ChessBoard.vue -->
 <template>
   <div class="chessboard-container">
     <!-- Active Turn Status Bar -->
-    <div class="status-bar" :class="board.activeColor">
-      Turn: <strong>{{ board.activeColor === COLOR.WHITE ? 'White' : 'Black' }}</strong>
-      <span v-if="board.isInCheck(board.activeColor)" class="check-warning"> (CHECK)</span>
+    <div 
+      class="status-bar" 
+      :class="[
+        board.activeColor === COLOR.WHITE ? 'white' : 'black',
+        { 'check-status': isCheck, 'mate-status': isGameOver }
+      ]"
+    >
+      <span v-if="isCheckmate">
+        CHECKMATE! {{ winningPlayerName }} Wins!
+      </span>
+      <span v-else-if="isStalemate">
+        STALEMATE! Game ends in a draw.
+      </span>
+      <span v-else-if="isCheck">
+        Turn: <strong>{{ activePlayerName }}</strong>
+        <span class="check-warning"> (CHECK)</span>
+      </span>
+      <span v-else>
+        Turn: <strong>{{ activePlayerName }}</strong>
+      </span>
     </div>
 
     <div class="chessboard">
@@ -60,12 +77,23 @@
           {{ option.label }}
         </button>
       </div>
+
+      <!-- Game Over Modal Overlay -->
+      <div v-if="isGameOver" class="game-over-overlay">
+        <div class="game-over-modal">
+          <h2 v-if="isCheckmate">Checkmate!</h2>
+          <h2 v-else>Stalemate</h2>
+          <p v-if="isCheckmate">{{ winningPlayerName }} wins the game.</p>
+          <p v-else>No legal moves remaining. The game is a draw.</p>
+          <button type="button" class="restart-btn" @click="restartGame">Play Again</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { shallowRef, ref, computed } from 'vue';
+import { shallowRef, ref, computed, triggerRef } from 'vue';
 import { Board } from '../chess_core/board.js';
 import { COLOR, PIECE_TYPE } from '../chess_core/piece.js';
 
@@ -90,6 +118,14 @@ const getFileLabel = (index) => String.fromCharCode(97 + getCol(index));
 
 const checkedKingIndex = computed(() => board.value.getCheckedKingIndex());
 
+// Game State Indicators
+const activePlayerName = computed(() => board.value.activeColor === COLOR.WHITE ? 'White' : 'Black');
+const winningPlayerName = computed(() => board.value.activeColor === COLOR.WHITE ? 'Black' : 'White');
+const isCheck = computed(() => board.value.isInCheck());
+const isCheckmate = computed(() => board.value.isCheckmate());
+const isStalemate = computed(() => board.value.isStalemate());
+const isGameOver = computed(() => isCheckmate.value || isStalemate.value);
+
 const isPromotionMove = (fromIndex, toIndex) => {
   const piece = getPiece(fromIndex);
   const destinationRow = getRow(toIndex);
@@ -108,13 +144,18 @@ const completePromotion = (promotionType) => {
   promotionMove.value = null;
   selectedSquare.value = null;
   possibleMoves.value = [];
-  board.value = board.value; // Force shallowRef trigger
+  
+  // Force Vue shallowRef to trigger re-render of turn status
+  triggerRef(board);
 };
 
 /**
  * TURN MANAGEMENT CLICK HANDLER
  */
 const handleSquareClick = (index) => {
+  // Prevent move clicks when game is over or promotion menu is open
+  if (isGameOver.value || promotionMove.value) return;
+
   const clickedPiece = getPiece(index);
 
   // 1. Move piece if clicking an available move square
@@ -124,10 +165,13 @@ const handleSquareClick = (index) => {
       return;
     }
 
-    board.value.movePiece(selectedSquare.value, index);
-    selectedSquare.value = null;
-    possibleMoves.value = [];
-    board.value = board.value; // Trigger reactivity
+    const moved = board.value.movePiece(selectedSquare.value, index);
+    if (moved) {
+      selectedSquare.value = null;
+      possibleMoves.value = [];
+      // Force Vue shallowRef to trigger re-render of turn status
+      triggerRef(board);
+    }
     return;
   }
 
@@ -149,6 +193,14 @@ const handleSquareClick = (index) => {
   selectedSquare.value = null;
   possibleMoves.value = [];
 };
+
+const restartGame = () => {
+  board.value = new Board();
+  selectedSquare.value = null;
+  possibleMoves.value = [];
+  promotionMove.value = null;
+  triggerRef(board);
+};
 </script>
 
 <style scoped>
@@ -157,16 +209,18 @@ const handleSquareClick = (index) => {
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  font-family: sans-serif;
 }
 
 .status-bar {
   font-size: 16px;
-  font-family: sans-serif;
-  padding: 6px 16px;
+  padding: 8px 16px;
   border-radius: 4px;
   border: 1px solid #ccc;
   background: #f4f4f4;
-  text-transform: capitalize;
+  width: 448px;
+  text-align: center;
+  transition: all 0.2s ease;
 }
 
 .status-bar.white {
@@ -177,6 +231,17 @@ const handleSquareClick = (index) => {
 .status-bar.black {
   background: #222222;
   color: #fff;
+  border-color: #444;
+}
+
+.status-bar.check-status {
+  border-color: #e53935;
+}
+
+.status-bar.mate-status {
+  background: #111;
+  color: #fff;
+  border-color: #000;
 }
 
 .check-warning {
@@ -214,6 +279,51 @@ const handleSquareClick = (index) => {
   background: #f0d9b5;
   font-weight: bold;
   cursor: pointer;
+}
+
+.game-over-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 15;
+}
+
+.game-over-modal {
+  background: #fff;
+  padding: 20px 30px;
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.game-over-modal h2 {
+  margin: 0 0 8px 0;
+  color: #111;
+}
+
+.game-over-modal p {
+  margin: 0 0 16px 0;
+  color: #555;
+}
+
+.restart-btn {
+  padding: 8px 16px;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.restart-btn:hover {
+  background: #1b5e20;
 }
 
 .square {

@@ -269,8 +269,7 @@ export class Board {
     this.updateCastlingRights(movingPiece, fromRow, fromCol, targetPiece, toRow, toCol);
     this.enPassantTarget = null;
     if (isPawnMove && Math.abs(toRow - fromRow) === 2) {
-      this.enPassantTarget = `${String.fromCharCode(97 + fromCol)}${8 - (fromRow + direction)}
-`;
+      this.enPassantTarget = `${String.fromCharCode(97 + fromCol)}${8 - (fromRow + direction)}`;
     }
     this.halfMoveClock = isPawnMove || isCapture ? 0 : this.halfMoveClock + 1;
 
