@@ -1,4 +1,4 @@
-<!-- src/components/ChessBoard.vue -->
+<!-- src/components/Chessboard.vue -->
 <template>
   <div class="chessboard-container">
     <!-- Active Turn Status Bar -->
@@ -93,7 +93,7 @@
 </template>
 
 <script setup>
-import { shallowRef, ref, computed, triggerRef } from 'vue';
+import { shallowRef, ref, computed, onMounted, triggerRef } from 'vue';
 import { Board } from '../chess_core/board.js';
 import { COLOR, PIECE_TYPE } from '../chess_core/piece.js';
 
@@ -101,6 +101,10 @@ const board = shallowRef(new Board());
 const selectedSquare = ref(null);
 const possibleMoves = ref([]);
 const promotionMove = ref(null);
+
+// User Session State: null = guest mode (plays locally without DB spam), number = logged-in user ID
+const currentUser = ref(null); 
+const currentGameId = ref(null);
 
 const promotionOptions = [
   { type: PIECE_TYPE.QUEEN, label: 'Queen' },
@@ -126,6 +130,51 @@ const isCheckmate = computed(() => board.value.isCheckmate());
 const isStalemate = computed(() => board.value.isStalemate());
 const isGameOver = computed(() => isCheckmate.value || isStalemate.value);
 
+// --- DATABASE INTEGRATION (SILENT GUEST BYPASS) ---
+const initializeGameInDB = async () => {
+  if (!currentUser.value) return; // Skip silently if guest
+
+  try {
+    const response = await fetch('http://localhost:5000/api/games', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ whitePlayerId: currentUser.value, blackPlayerId: null })
+    });
+    const gameData = await response.json();
+    currentGameId.value = gameData.id;
+    console.log("Game created in PostgreSQL with ID:", currentGameId.value);
+  } catch (err) {
+    console.error("Error connecting to backend to create game:", err);
+  }
+};
+
+const saveMoveToDB = async (sanMoveText) => {
+  if (!currentUser.value || !currentGameId.value) return; // Skip silently if guest
+
+  try {
+    const currentFen = board.value.toFEN ? board.value.toFEN() : '';
+    await fetch('http://localhost:5000/api/moves', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        gameId: currentGameId.value,
+        playerId: currentUser.value,
+        moveNumber: board.value.fullMoveNumber || 1,
+        sanMove: sanMoveText || 'move',
+        fenAfterMove: currentFen
+      })
+    });
+    console.log("Move saved to database.");
+  } catch (err) {
+    console.error("Error saving move to database:", err);
+  }
+};
+
+onMounted(() => {
+  initializeGameInDB();
+});
+// --------------------------------------------------
+
 const isPromotionMove = (fromIndex, toIndex) => {
   const piece = getPiece(fromIndex);
   const destinationRow = getRow(toIndex);
@@ -141,11 +190,11 @@ const completePromotion = (promotionType) => {
     promotionType
   );
 
+  saveMoveToDB('promotion');
+
   promotionMove.value = null;
   selectedSquare.value = null;
   possibleMoves.value = [];
-  
-  // Force Vue shallowRef to trigger re-render of turn status
   triggerRef(board);
 };
 
@@ -153,7 +202,6 @@ const completePromotion = (promotionType) => {
  * TURN MANAGEMENT CLICK HANDLER
  */
 const handleSquareClick = (index) => {
-  // Prevent move clicks when game is over or promotion menu is open
   if (isGameOver.value || promotionMove.value) return;
 
   const clickedPiece = getPiece(index);
@@ -167,9 +215,9 @@ const handleSquareClick = (index) => {
 
     const moved = board.value.movePiece(selectedSquare.value, index);
     if (moved) {
+      saveMoveToDB('move');
       selectedSquare.value = null;
       possibleMoves.value = [];
-      // Force Vue shallowRef to trigger re-render of turn status
       triggerRef(board);
     }
     return;
@@ -199,6 +247,7 @@ const restartGame = () => {
   selectedSquare.value = null;
   possibleMoves.value = [];
   promotionMove.value = null;
+  initializeGameInDB();
   triggerRef(board);
 };
 </script>
