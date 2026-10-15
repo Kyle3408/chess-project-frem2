@@ -1,6 +1,18 @@
 <!-- src/components/Chessboard.vue -->
 <template>
   <div class="chessboard-container">
+    <!-- User Session & Registration Header Bar -->
+    <div class="user-session-bar">
+      <div v-if="currentUser" class="logged-in-badge">
+        👤 Logged in as: <strong>{{ currentUsername }}</strong> (ID: {{ currentUser }})
+        <button type="button" class="logout-btn" @click="logout">Logout</button>
+      </div>
+      <div v-else class="guest-actions">
+        <span class="guest-text">Playing as Guest (Moves not saved)</span>
+        <button type="button" class="action-btn" @click="showRegisterModal = true">Register</button>
+      </div>
+    </div>
+
     <!-- Active Turn Status Bar -->
     <div 
       class="status-bar" 
@@ -88,6 +100,27 @@
           <button type="button" class="restart-btn" @click="restartGame">Play Again</button>
         </div>
       </div>
+
+      <!-- Registration Modal Overlay -->
+      <div v-if="showRegisterModal" class="game-over-overlay">
+        <div class="game-over-modal register-modal">
+          <h2>Create an Account</h2>
+          <p>Register to start saving your games and moves to the database.</p>
+          
+          <form @submit.prevent="handleRegister" class="register-form">
+            <input type="text" v-model="regForm.username" placeholder="Username" required />
+            <input type="email" v-model="regForm.email" placeholder="Email" required />
+            <input type="password" v-model="regForm.password" placeholder="Password" required />
+            
+            <p v-if="regError" class="error-msg">{{ regError }}</p>
+
+            <div class="modal-buttons">
+              <button type="button" class="cancel-btn" @click="showRegisterModal = false">Cancel</button>
+              <button type="submit" class="submit-btn">Register & Login</button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -102,9 +135,15 @@ const selectedSquare = ref(null);
 const possibleMoves = ref([]);
 const promotionMove = ref(null);
 
-// User Session State: null = guest mode (plays locally without DB spam), number = logged-in user ID
-const currentUser = ref(null); 
+// User Session State
+const currentUser = ref(null); // null = guest mode
+const currentUsername = ref('');
 const currentGameId = ref(null);
+
+// Registration Form State
+const showRegisterModal = ref(false);
+const regForm = ref({ username: '', email: '', password: '' });
+const regError = ref('');
 
 const promotionOptions = [
   { type: PIECE_TYPE.QUEEN, label: 'Queen' },
@@ -130,9 +169,45 @@ const isCheckmate = computed(() => board.value.isCheckmate());
 const isStalemate = computed(() => board.value.isStalemate());
 const isGameOver = computed(() => isCheckmate.value || isStalemate.value);
 
-// --- DATABASE INTEGRATION (SILENT GUEST BYPASS) ---
+// --- REGISTRATION & AUTHENTICATION HANDLERS ---
+const handleRegister = async () => {
+  regError.value = '';
+  try {
+    const response = await fetch('http://localhost:5000/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(regForm.value)
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to register');
+    }
+
+    // Successfully registered and logged in!
+    currentUser.value = data.id;
+    currentUsername.value = data.username;
+    showRegisterModal.value = false;
+    regForm.value = { username: '', email: '', password: '' };
+
+    // Initialize game session in DB now that user is logged in
+    initializeGameInDB();
+  } catch (err) {
+    regError.value = err.message;
+  }
+};
+
+const logout = () => {
+  currentUser.value = null;
+  currentUsername.value = '';
+  currentGameId.value = null;
+  board.value = new Board();
+  triggerRef(board);
+};
+
+// --- DATABASE INTEGRATION ---
 const initializeGameInDB = async () => {
-  if (!currentUser.value) return; // Skip silently if guest
+  if (!currentUser.value) return;
 
   try {
     const response = await fetch('http://localhost:5000/api/games', {
@@ -149,7 +224,7 @@ const initializeGameInDB = async () => {
 };
 
 const saveMoveToDB = async (sanMoveText) => {
-  if (!currentUser.value || !currentGameId.value) return; // Skip silently if guest
+  if (!currentUser.value || !currentGameId.value) return;
 
   try {
     const currentFen = board.value.toFEN ? board.value.toFEN() : '';
@@ -173,7 +248,6 @@ const saveMoveToDB = async (sanMoveText) => {
 onMounted(() => {
   initializeGameInDB();
 });
-// --------------------------------------------------
 
 const isPromotionMove = (fromIndex, toIndex) => {
   const piece = getPiece(fromIndex);
@@ -259,6 +333,91 @@ const restartGame = () => {
   align-items: center;
   gap: 12px;
   font-family: sans-serif;
+}
+
+.user-session-bar {
+  width: 448px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #f4f4f4;
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+}
+
+.guest-text {
+  color: #666;
+}
+
+.action-btn, .submit-btn {
+  padding: 6px 12px;
+  background: #2e7d32;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.action-btn:hover, .submit-btn:hover {
+  background: #1b5e20;
+}
+
+.logout-btn {
+  padding: 4px 8px;
+  background: #d32f2f;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.logout-btn:hover {
+  background: #c62828;
+}
+
+.register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.register-form input {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.error-msg {
+  color: #d32f2f;
+  font-size: 13px;
+  margin: 0;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.cancel-btn {
+  padding: 6px 12px;
+  background: #9e9e9e;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.cancel-btn:hover {
+  background: #757575;
 }
 
 .status-bar {
@@ -351,6 +510,11 @@ const restartGame = () => {
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 
+.register-modal {
+  width: 320px;
+  text-align: left;
+}
+
 .game-over-modal h2 {
   margin: 0 0 8px 0;
   color: #111;
@@ -359,6 +523,7 @@ const restartGame = () => {
 .game-over-modal p {
   margin: 0 0 16px 0;
   color: #555;
+  font-size: 14px;
 }
 
 .restart-btn {
