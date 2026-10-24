@@ -28,8 +28,8 @@ app.post('/api/register', async (req, res) => {
     console.log("✅ New user registered:", result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("❌ Registration error:", err.message);
-    res.status(500).json({ error: "Username or email already exists" });
+    console.error("❌ Full Registration Error:", err);
+    res.status(500).json({ error: err.message || "An unexpected error occurred" });
   }
 });
 
@@ -53,7 +53,7 @@ app.post('/api/moves', async (req, res) => {
     const { gameId, playerId, moveNumber, sanMove, fenAfterMove } = req.body;
     const moveResult = await pool.query(
       `INSERT INTO movelogs (game_id, player_id, move_number, san_move, fen_after_move)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [gameId, playerId || null, moveNumber, sanMove, fenAfterMove]
     );
 

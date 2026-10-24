@@ -10,6 +10,7 @@
     "test": "node --test src/chess_core/*.test.js"
   },
   "dependencies": {
+    "dotenv": "^18.0.9",
     "vue": "^3.5.40"
   },
   "devDependencies": {
