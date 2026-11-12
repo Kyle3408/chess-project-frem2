@@ -1,7 +1,7 @@
 <!-- src/components/Chessboard.vue -->
 <template>
   <div class="chessboard-container">
-    <!-- User Session & Registration Header Bar -->
+    <!-- User Session & Authentication Header Bar -->
     <div class="user-session-bar">
       <div v-if="currentUser" class="logged-in-badge">
         👤 Logged in as: <strong>{{ currentUsername }}</strong> (ID: {{ currentUser }})
@@ -9,7 +9,10 @@
       </div>
       <div v-else class="guest-actions">
         <span class="guest-text">Playing as Guest (Moves not saved)</span>
-        <button type="button" class="action-btn" @click="showRegisterModal = true">Register</button>
+        <div class="auth-buttons">
+          <button type="button" class="action-btn secondary" @click="showLoginModal = true">Login</button>
+          <button type="button" class="action-btn" @click="showRegisterModal = true">Register</button>
+        </div>
       </div>
     </div>
 
@@ -101,13 +104,33 @@
         </div>
       </div>
 
+      <!-- Login Modal Overlay -->
+      <div v-if="showLoginModal" class="game-over-overlay">
+        <div class="game-over-modal auth-modal">
+          <h2>Log In</h2>
+          <p>Enter your credentials to access your account.</p>
+          
+          <form @submit.prevent="handleLogin" class="auth-form">
+            <input type="email" v-model="loginForm.email" placeholder="Email" required />
+            <input type="password" v-model="loginForm.password" placeholder="Password" required />
+            
+            <p v-if="loginError" class="error-msg">{{ loginError }}</p>
+
+            <div class="modal-buttons">
+              <button type="button" class="cancel-btn" @click="showLoginModal = false">Cancel</button>
+              <button type="submit" class="submit-btn">Login</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
       <!-- Registration Modal Overlay -->
       <div v-if="showRegisterModal" class="game-over-overlay">
-        <div class="game-over-modal register-modal">
+        <div class="game-over-modal auth-modal">
           <h2>Create an Account</h2>
           <p>Register to start saving your games and moves to the database.</p>
           
-          <form @submit.prevent="handleRegister" class="register-form">
+          <form @submit.prevent="handleRegister" class="auth-form">
             <input type="text" v-model="regForm.username" placeholder="Username" required />
             <input type="email" v-model="regForm.email" placeholder="Email" required />
             <input type="password" v-model="regForm.password" placeholder="Password" required />
@@ -140,6 +163,11 @@ const currentUser = ref(null); // null = guest mode
 const currentUsername = ref('');
 const currentGameId = ref(null);
 
+// Login Form State
+const showLoginModal = ref(false);
+const loginForm = ref({ email: '', password: '' });
+const loginError = ref('');
+
 // Registration Form State
 const showRegisterModal = ref(false);
 const regForm = ref({ username: '', email: '', password: '' });
@@ -169,7 +197,32 @@ const isCheckmate = computed(() => board.value.isCheckmate());
 const isStalemate = computed(() => board.value.isStalemate());
 const isGameOver = computed(() => isCheckmate.value || isStalemate.value);
 
-// --- REGISTRATION & AUTHENTICATION HANDLERS ---
+// --- AUTHENTICATION HANDLERS ---
+const handleLogin = async () => {
+  loginError.value = '';
+  try {
+    const response = await fetch('http://localhost:5000/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(loginForm.value)
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to login');
+    }
+
+    currentUser.value = data.id;
+    currentUsername.value = data.username;
+    showLoginModal.value = false;
+    loginForm.value = { email: '', password: '' };
+
+    initializeGameInDB();
+  } catch (err) {
+    loginError.value = err.message;
+  }
+};
+
 const handleRegister = async () => {
   regError.value = '';
   try {
@@ -184,13 +237,11 @@ const handleRegister = async () => {
       throw new Error(data.error || 'Failed to register');
     }
 
-    // Successfully registered and logged in!
     currentUser.value = data.id;
     currentUsername.value = data.username;
     showRegisterModal.value = false;
     regForm.value = { username: '', email: '', password: '' };
 
-    // Initialize game session in DB now that user is logged in
     initializeGameInDB();
   } catch (err) {
     regError.value = err.message;
@@ -351,6 +402,11 @@ const restartGame = () => {
   color: #666;
 }
 
+.auth-buttons {
+  display: flex;
+  gap: 6px;
+}
+
 .action-btn, .submit-btn {
   padding: 6px 12px;
   background: #2e7d32;
@@ -361,8 +417,16 @@ const restartGame = () => {
   cursor: pointer;
 }
 
+.action-btn.secondary {
+  background: #1976d2;
+}
+
 .action-btn:hover, .submit-btn:hover {
   background: #1b5e20;
+}
+
+.action-btn.secondary:hover {
+  background: #115293;
 }
 
 .logout-btn {
@@ -380,14 +444,14 @@ const restartGame = () => {
   background: #c62828;
 }
 
-.register-form {
+.auth-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
   width: 100%;
 }
 
-.register-form input {
+.auth-form input {
   padding: 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
@@ -510,7 +574,7 @@ const restartGame = () => {
   box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 
-.register-modal {
+.auth-modal {
   width: 320px;
   text-align: left;
 }

@@ -8,7 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Endpoint para registrar un usuario nuevo
+// --- REGISTER ENDPOINT ---
 app.post('/api/register', async (req, res) => {
   try {
     const { username, email, password } = req.body;
@@ -28,12 +28,41 @@ app.post('/api/register', async (req, res) => {
     console.log("✅ New user registered:", result.rows[0]);
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("❌ Full Registration Error:", err);
-    res.status(500).json({ error: err.message || "An unexpected error occurred" });
+    console.error("❌ Registration error:", err.message);
+    res.status(500).json({ error: "Username or email already exists" });
   }
 });
 
-// Endpoint para crear una partida
+// --- LOGIN ENDPOINT ---
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: "Email and password are required" });
+    }
+
+    const result = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    const user = result.rows[0];
+    const isValidPassword = await bcrypt.compare(password, user.password_hash);
+
+    if (!isValidPassword) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+
+    console.log("✅ User logged in:", user.username);
+    res.json({ id: user.id, username: user.username, email: user.email });
+  } catch (err) {
+    console.error("❌ Login error:", err.message);
+    res.status(500).json({ error: "Server error during login" });
+  }
+});
+
+// --- CREATE GAME ENDPOINT ---
 app.post('/api/games', async (req, res) => {
   try {
     const { whitePlayerId, blackPlayerId } = req.body;
@@ -47,13 +76,13 @@ app.post('/api/games', async (req, res) => {
   }
 });
 
-// Endpoint para registrar un movimiento
+// --- SAVE MOVE ENDPOINT ---
 app.post('/api/moves', async (req, res) => {
   try {
     const { gameId, playerId, moveNumber, sanMove, fenAfterMove } = req.body;
     const moveResult = await pool.query(
       `INSERT INTO movelogs (game_id, player_id, move_number, san_move, fen_after_move)
-        VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
       [gameId, playerId || null, moveNumber, sanMove, fenAfterMove]
     );
 
