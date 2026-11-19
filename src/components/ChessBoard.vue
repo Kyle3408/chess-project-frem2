@@ -10,7 +10,7 @@
       <div v-else class="guest-actions">
         <span class="guest-text">Playing as Guest (Moves not saved)</span>
         <div class="auth-buttons">
-          <button type="button" class="action-btn secondary" @click="showLoginModal = true">Login</button>
+          <button type="button" class="action-btn secondary" @click="openLoginModal">Login</button>
           <button type="button" class="action-btn" @click="showRegisterModal = true">Register</button>
         </div>
       </div>
@@ -114,11 +114,100 @@
             <input type="email" v-model="loginForm.email" placeholder="Email" required />
             <input type="password" v-model="loginForm.password" placeholder="Password" required />
             
+            <div class="forgot-link-row">
+              <button type="button" class="text-link-btn" @click="openResetModal">
+                Forgot password?
+              </button>
+            </div>
+
             <p v-if="loginError" class="error-msg">{{ loginError }}</p>
+            <p v-if="loginSuccessMsg" class="success-msg">{{ loginSuccessMsg }}</p>
 
             <div class="modal-buttons">
               <button type="button" class="cancel-btn" @click="showLoginModal = false">Cancel</button>
               <button type="submit" class="submit-btn">Login</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Existing accounts set recovery questions after logging in -->
+      <div v-if="showSecuritySetupModal" class="game-over-overlay">
+        <div class="game-over-modal auth-modal">
+          <h2>Set Up Password Recovery</h2>
+          <p>Choose a question and answer so you can reset your password without email.</p>
+
+          <form @submit.prevent="handleSaveSecurityQuestion" class="auth-form">
+            <input
+              type="password"
+              v-model="securitySetupForm.currentPassword"
+              placeholder="Current Password"
+              required
+            />
+            <select v-model="securitySetupForm.securityQuestion" required>
+              <option disabled value="">Choose a security question</option>
+              <option
+                v-for="question in securityQuestionOptions"
+                :key="question.value"
+                :value="question.value"
+              >
+                {{ question.label }}
+              </option>
+            </select>
+            <input
+              type="text"
+              v-model="securitySetupForm.securityAnswer"
+              placeholder="Your answer"
+              autocomplete="off"
+              required
+            />
+
+            <p v-if="securitySetupError" class="error-msg">{{ securitySetupError }}</p>
+
+            <div class="modal-buttons">
+              <button type="submit" class="submit-btn">Save Recovery Question</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Password Reset Modal Overlay -->
+      <div v-if="showResetModal" class="game-over-overlay">
+        <div class="game-over-modal auth-modal">
+          <h2>Reset Password</h2>
+
+          <!-- Step 1: Look up the account's security question -->
+          <form v-if="resetStep === 1" @submit.prevent="handleRequestReset" class="auth-form">
+            <p>Enter your registered email address to view your security question.</p>
+            <input type="email" v-model="resetForm.email" placeholder="Registered Email" required />
+
+            <p v-if="resetError" class="error-msg">{{ resetError }}</p>
+
+            <div class="modal-buttons">
+              <button type="button" class="cancel-btn" @click="backToLogin">Back to Login</button>
+              <button type="submit" class="submit-btn">Show Question</button>
+            </div>
+          </form>
+
+          <!-- Step 2: Answer the question and choose a new password -->
+          <form v-else @submit.prevent="handleConfirmReset" class="auth-form">
+            <p>Answer your security question and choose a new password.</p>
+            <p class="security-question">{{ resetForm.securityQuestion }}</p>
+            <input
+              type="text"
+              v-model="resetForm.securityAnswer"
+              placeholder="Your answer"
+              autocomplete="off"
+              required
+            />
+            <input type="password" v-model="resetForm.newPassword" placeholder="New Password" required />
+            <input type="password" v-model="resetForm.confirmPassword" placeholder="Confirm New Password" required />
+
+            <p v-if="resetError" class="error-msg">{{ resetError }}</p>
+
+            <div class="modal-buttons">
+              <button type="button" class="cancel-btn" @click="resetStep = 1">Back</button>
+              <button type="submit" class="submit-btn">Update Password</button>
             </div>
           </form>
         </div>
@@ -134,6 +223,23 @@
             <input type="text" v-model="regForm.username" placeholder="Username" required />
             <input type="email" v-model="regForm.email" placeholder="Email" required />
             <input type="password" v-model="regForm.password" placeholder="Password" required />
+            <select v-model="regForm.securityQuestion" required>
+              <option disabled value="">Choose a security question</option>
+              <option
+                v-for="question in securityQuestionOptions"
+                :key="question.value"
+                :value="question.value"
+              >
+                {{ question.label }}
+              </option>
+            </select>
+            <input
+              type="text"
+              v-model="regForm.securityAnswer"
+              placeholder="Security answer (used for password recovery)"
+              autocomplete="off"
+              required
+            />
             
             <p v-if="regError" class="error-msg">{{ regError }}</p>
 
@@ -167,11 +273,28 @@ const currentGameId = ref(null);
 const showLoginModal = ref(false);
 const loginForm = ref({ email: '', password: '' });
 const loginError = ref('');
+const loginSuccessMsg = ref('');
+
+// Password Reset Form State
+const showResetModal = ref(false);
+const resetStep = ref(1);
+const resetForm = ref({ email: '', securityQuestion: '', securityAnswer: '', newPassword: '', confirmPassword: '' });
+const resetError = ref('');
+const showSecuritySetupModal = ref(false);
+const securitySetupForm = ref({ email: '', currentPassword: '', securityQuestion: '', securityAnswer: '' });
+const securitySetupError = ref('');
 
 // Registration Form State
 const showRegisterModal = ref(false);
-const regForm = ref({ username: '', email: '', password: '' });
+const regForm = ref({ username: '', email: '', password: '', securityQuestion: '', securityAnswer: '' });
 const regError = ref('');
+
+const securityQuestionOptions = [
+  { value: 'first_pet', label: 'What was the name of your first pet?' },
+  { value: 'first_school', label: 'What was the name of your first school?' },
+  { value: 'birth_city', label: 'In what city were you born?' },
+  { value: 'childhood_friend', label: 'What was the first name of a childhood friend?' }
+];
 
 const promotionOptions = [
   { type: PIECE_TYPE.QUEEN, label: 'Queen' },
@@ -197,9 +320,36 @@ const isCheckmate = computed(() => board.value.isCheckmate());
 const isStalemate = computed(() => board.value.isStalemate());
 const isGameOver = computed(() => isCheckmate.value || isStalemate.value);
 
+// --- MODAL NAVIGATION HELPERS ---
+const openLoginModal = () => {
+  loginError.value = '';
+  loginSuccessMsg.value = '';
+  showLoginModal.value = true;
+};
+
+const openResetModal = () => {
+  showLoginModal.value = false;
+  resetStep.value = 1;
+  resetError.value = '';
+  resetForm.value = {
+    email: loginForm.value.email || '',
+    securityQuestion: '',
+    securityAnswer: '',
+    newPassword: '',
+    confirmPassword: ''
+  };
+  showResetModal.value = true;
+};
+
+const backToLogin = () => {
+  showResetModal.value = false;
+  showLoginModal.value = true;
+};
+
 // --- AUTHENTICATION HANDLERS ---
 const handleLogin = async () => {
   loginError.value = '';
+  loginSuccessMsg.value = '';
   try {
     const response = await fetch('http://localhost:5000/api/login', {
       method: 'POST',
@@ -215,11 +365,104 @@ const handleLogin = async () => {
     currentUser.value = data.id;
     currentUsername.value = data.username;
     showLoginModal.value = false;
+    if (!data.hasSecurityQuestion) {
+      securitySetupForm.value = {
+        email: loginForm.value.email,
+        currentPassword: '',
+        securityQuestion: '',
+        securityAnswer: ''
+      };
+      securitySetupError.value = '';
+      showSecuritySetupModal.value = true;
+    }
     loginForm.value = { email: '', password: '' };
 
     initializeGameInDB();
   } catch (err) {
     loginError.value = err.message;
+  }
+};
+
+const handleRequestReset = async () => {
+  resetError.value = '';
+  try {
+    const response = await fetch('http://localhost:5000/api/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: resetForm.value.email })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to look up security question');
+    }
+
+    resetForm.value.securityQuestion = data.securityQuestion;
+    resetStep.value = 2;
+  } catch (err) {
+    resetError.value = err.message;
+  }
+};
+
+const handleSaveSecurityQuestion = async () => {
+  securitySetupError.value = '';
+  try {
+    const response = await fetch('http://localhost:5000/api/security-question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(securitySetupForm.value)
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to save security question');
+    }
+
+    showSecuritySetupModal.value = false;
+    securitySetupForm.value = {
+      email: '',
+      currentPassword: '',
+      securityQuestion: '',
+      securityAnswer: ''
+    };
+  } catch (err) {
+    securitySetupError.value = err.message;
+  }
+};
+
+const handleConfirmReset = async () => {
+  resetError.value = '';
+
+  if (resetForm.value.newPassword !== resetForm.value.confirmPassword) {
+    resetError.value = 'Passwords do not match.';
+    return;
+  }
+
+  try {
+    const response = await fetch('http://localhost:5000/api/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: resetForm.value.email,
+        securityAnswer: resetForm.value.securityAnswer,
+        newPassword: resetForm.value.newPassword
+      })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || 'Failed to reset password');
+    }
+
+    // Return to login modal with pre-filled email and confirmation message
+    showResetModal.value = false;
+    loginForm.value.email = resetForm.value.email;
+    loginForm.value.password = '';
+    loginError.value = '';
+    loginSuccessMsg.value = 'Password reset! Please log in with your new password.';
+    showLoginModal.value = true;
+  } catch (err) {
+    resetError.value = err.message;
   }
 };
 
@@ -240,7 +483,7 @@ const handleRegister = async () => {
     currentUser.value = data.id;
     currentUsername.value = data.username;
     showRegisterModal.value = false;
-    regForm.value = { username: '', email: '', password: '' };
+    regForm.value = { username: '', email: '', password: '', securityQuestion: '', securityAnswer: '' };
 
     initializeGameInDB();
   } catch (err) {
@@ -451,17 +694,53 @@ const restartGame = () => {
   width: 100%;
 }
 
-.auth-form input {
+.auth-form input,
+.auth-form select {
   padding: 8px;
   border: 1px solid #ccc;
   border-radius: 4px;
   font-size: 14px;
 }
 
+.security-question {
+  margin: 0;
+  padding: 10px;
+  background: #f4f4f4;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.forgot-link-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+}
+
+.text-link-btn {
+  background: none;
+  border: none;
+  color: #1976d2;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.text-link-btn:hover {
+  color: #0d47a1;
+}
+
 .error-msg {
   color: #d32f2f;
   font-size: 13px;
   margin: 0;
+}
+
+.success-msg {
+  color: #2e7d32;
+  font-size: 13px;
+  margin: 0;
+  font-weight: bold;
 }
 
 .modal-buttons {
